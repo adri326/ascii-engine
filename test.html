@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>AsciiEngine test</title>
+    <script src="index.js"></script>
+    <script src="test.js" defer></script>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        width: 100vw;
+        height: 100vh;
+        background: #141414;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      #canvas {
+        box-shadow: 2px 2px 15px -2px rgba(0, 0, 0, 0.4);
+        max-width: 100%;
+        object-fit: contain;
+      }
+
+      #font-loader {
+        position: fixed;
+        top: -16em;
+        font-family: ATIFont;
+      }
+
+      @font-face {
+        font-family: LCD;
+        /* https://www.fontspace.com/lcd-solid/lcd-solid */
+        src: url(fonts/LCD_Solid.ttf);
+      }
+
+      @font-face {
+        font-family: SilkScreen;
+        /* https://www.dafont.com/silkscreen.font */
+        src: url(fonts/slkscr.ttf);
+      }
+
+      @font-face {
+        font-family: SilkScreen;
+        font-weight: bold;
+        src: url(fonts/slkscrb.ttf);
+      }
+
+      @font-face {
+        font-family: ATIFont;
+        src:
+          url("fonts/Px437_ATI_8x8.ttf") format("truetype");
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+    <div id="font-loader">I'm the font loader!</div>
+  </body>
+</html>
