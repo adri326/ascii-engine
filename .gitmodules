@@ -1,0 +1,6 @@
+[submodule "dependencies/ulid"]
+	path = dependencies/ulid
+	url = https://github.com/ulid/javascript
+[submodule "dependencies/necklace"]
+	path = dependencies/necklace
+	url = https://github.com/adri326/necklace
