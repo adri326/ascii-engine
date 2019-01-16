@@ -1,6 +1,7 @@
 let ae;
 let builder = new AsciiEngine.Builder("#canvas", 16, 16)
-  .size(60, 30)
+  .lineHeight(18)
+  .size(45, 30)
   .font("ATIFont")
   .css()
   .build()
@@ -9,9 +10,12 @@ let builder = new AsciiEngine.Builder("#canvas", 16, 16)
     init();
   });
 
-const TEXT = "Hey there! I am the sample text!" + AsciiEngine.BORDER_HORIZONTAL + AsciiEngine.DBORDER_HORIZONTAL + AsciiEngine.DBORDER_VERTICAL + "%+,.?@#$^&~";
-let timeStart = performance.now();
+let timeStart;
 let box;
+let textToDisplay = "";
+
+let necklace = new Necklace();
+
 
 function init() {
   ae.replaceFullBlock = false;
@@ -27,6 +31,56 @@ function init() {
     bottomright: AsciiEngine.DCORNER_BOTTOMRIGHT,
     corner: "#"
   });
+  box.border("*-*| |*-*");
+  box.padding(2);
+
+  let pages = [necklace.createPage("Hey there! Welcome to this demo of AsciiEngine!")];
+  necklace.setFirstPage(pages[0]);
+  pages.push(necklace.createPage("As you can see, this demo does support user input :3"));
+  pages.push(necklace.createPage("I think you've hit an end."));
+  pages.push(necklace.createPage("You won't have the choice anyway."));
+  pages.push(necklace.createPage("Last page, there's only the way back now!"));
+  pages.push(necklace.createPage("Forgot this one page, but now it's the very last one, nothing else up for you!"));
+  necklace.createString(pages[0], pages[1], "1", "Next page");
+  necklace.createString(pages[0], pages[2], "2", "Jump to the end");
+
+  // user input :3
+  necklace.createString(pages[1], pages[2], "1", "Next page");
+
+  // end
+  necklace.createString(pages[2], pages[0], "1", "Back to the first page");
+  necklace.createString(pages[2], pages[3], "2", "I don't care");
+
+  // no choice
+  necklace.createString(pages[3], pages[0], "1", "Back to the first page!");
+  necklace.createString(pages[3], pages[4], "2", "Didn't listen");
+
+  // only way back
+  necklace.createString(pages[4], pages[0], "1", "Go back!!");
+  necklace.createString(pages[4], pages[0], "2", "Go back!!");
+  necklace.createString(pages[4], pages[5], "3", "Go back!!!");
+
+  // forgot this one
+  necklace.createString(pages[5], pages[0], "1", "The end.");
+
+  let user = necklace.createUser({name: "Demo User"});
+  let current = user.getCurrentPage();
+  let strings = current.getAvailableStrings();
+
+  ae.on("keydown", (evt) => {
+    let string = strings.find((str) => str.name === evt.key);
+    if (string) {
+      user.select(string, evt.key);
+      timeStart = performance.now();
+      current = user.getCurrentPage();
+      strings = current.getAvailableStrings();
+      textToDisplay = renderPage(current, strings);
+    }
+  });
+
+  textToDisplay = renderPage(current, strings);
+  timeStart = performance.now();
+
   draw();
 }
 
@@ -36,6 +90,15 @@ function draw() {
   ae.fill(AsciiEngine.SPACE);
   box.printBorder(ae);
   ae.foreground(245, 255, 245);
-  ae.printBoxed(TEXT, 4, 6, ae.width - 8, ae.height - 13, Math.floor((performance.now() - timeStart) / 50));
+  box.printText(ae, textToDisplay, Math.floor((performance.now() - timeStart) / 25));
   requestAnimationFrame(draw);
+}
+
+function renderPage(page, strings = page.getAvailableStrings()) {
+  let str = page.content;
+  str += "\n";
+  for (let string of strings) {
+    str += `\n [${string.name}]: ${string.content}`;
+  }
+  return str;
 }

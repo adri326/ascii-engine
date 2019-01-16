@@ -15,11 +15,18 @@ class AsciiEngine {
     this.fixedSize = false;
     this.tileSize = tileSize;
     this.tileSizeX = tileSizeX;
+    this.lh = tileSize;
     this.backgroundColor = [0, 0, 0, 1];
     this.foregroundColor = [255, 255, 255, 1];
     this.ctx.textAlign = "left";
     this.ctx.font = `${tileSize}px LCD`;
     this.replaceFullBlock = true;
+
+    this.eventHandlers = [];
+    this.keysDown = {};
+
+    window.addEventListener("keydown", this._onkeydown.bind(this));
+    window.addEventListener("keyup", this._onkeyup.bind(this));
 
     this.updateResolution();
   }
@@ -27,9 +34,9 @@ class AsciiEngine {
   updateResolution() {
     this.fixedSize = false;
     this.canvas.width = Math.round(this.canvas.clientWidth / this.tileSizeX) * this.tileSizeX;
-    this.canvas.height = Math.round(this.canvas.clientHeight / this.tileSize) * this.tileSize;
+    this.canvas.height = Math.round(this.canvas.clientHeight / this.lh) * this.lh;
     this.width = Math.floor(this.canvas.width / this.tileSizeX);
-    this.height = Math.floor(this.canvas.height / this.tileSize);
+    this.height = Math.floor(this.canvas.height / this.lh);
   }
 
   font(name, style = "") {
@@ -46,7 +53,11 @@ class AsciiEngine {
       this.tileSizeX = this.tileSize * ratio;
     }
     this.canvas.width = this.tileSizeX * this.width;
-    this.canvas.height = this.tileSize * this.height;
+    this.canvas.height = this.lh * this.height;
+  }
+
+  lineHeight(lineHeight) {
+    this.lh = lineHeight;
   }
 
   css() {
@@ -77,15 +88,15 @@ class AsciiEngine {
   print(char, x, y) {
     // background
     this.ctx.fillStyle = `rgba(${this.backgroundColor.join(",")})`;
-    this.ctx.fillRect(x * this.tileSizeX, y * this.tileSize, this.tileSizeX * char.length, this.tileSize);
+    this.ctx.fillRect(x * this.tileSizeX, y * this.lh, this.tileSizeX * char.length, this.lh);
     // foreground
     this.ctx.fillStyle = `rgba(${this.foregroundColor.join(",")})`;
     for (let n = 0; n < char.length; n++) {
       if (char[n] === AsciiEngine.FULL_BLOCK && this.replaceFullBlock) {
-        this.ctx.fillRect((x + n) * this.tileSizeX, y * this.tileSize, this.tileSizeX, this.tileSize);
+        this.ctx.fillRect((x + n) * this.tileSizeX, y * this.lh, this.tileSizeX, this.lh);
       }
       else if (char[n] !== AsciiEngine.SPACE) {
-        this.ctx.fillText(char[n], (x + n) * this.tileSizeX, (y + 1) * this.tileSize);
+        this.ctx.fillText(char[n], (x + n) * this.tileSizeX, y * this.lh + this.tileSize);
       }
     }
   }
@@ -104,22 +115,29 @@ class AsciiEngine {
     }
   }
 
-  split(text, width) {
-    if (text.length < width) return [text];
+  split(raw, width) {
     let res = [""];
-    let split = text.replace(AsciiEngine.SEPARATOR_REGEXP, "$1\uea01").split(/\uea01/g); // firefox does not support lookbehinds; we are using a private area in the unicode range
-    let length = 0;
     let current = 0;
-    for (let string of split) {
-      if (length + string.length <= width) {
-        length += string.length;
-        res[current] += string;
+    raw.split(/\n/g).forEach((text) => {
+      let length = 0;
+      res[++current] = "";
+      if (text.length < width) {
+        res[current] = text;
+        return;
       }
-      else {
-        res[++current] = string;
-        length = string.length;
+      let split = text.replace(AsciiEngine.SEPARATOR_REGEXP, "$1\uea01").split(/\uea01/g); // firefox does not support lookbehinds; we are using a private area in the unicode range
+      for (let string of split) {
+        if (length + string.length <= width) {
+          length += string.length;
+          res[current] += string;
+        }
+        else {
+          res[++current] = string;
+          length = string.length;
+        }
       }
-    }
+    });
+
     return res;
   }
 
@@ -137,6 +155,31 @@ class AsciiEngine {
         ae.print(char.repeat(this.width), 0, y);
       }
     }
+  }
+
+  on(evt, handler) {
+    if (typeof handler === "function") {
+      this.eventHandlers.push([evt, handler]);
+    }
+    else {
+      throw new Error("Invalid type for AsciiEngine::on(eventName, handler), should be a function");
+    }
+  }
+
+  dispatchEvent(name, evt) {
+    for (let [name_, handler] of this.eventHandlers) {
+      if (name_ === name) handler(evt);
+    }
+  }
+
+  _onkeydown(evt) {
+    this.keysDown[evt.code] = true;
+    this.dispatchEvent("keydown", evt);
+  }
+
+  _onkeyup(evt) {
+    this.keysDown[evt.code] = false;
+    this.dispatchEvent("keyup", evt);
   }
 }
 
@@ -160,6 +203,11 @@ AsciiEngine.Builder = class AsciiEngineBuilder {
     return this;
   }
 
+  lineHeight(lineHeight) {
+    this.ae.lineHeight(lineHeight);
+    return this;
+  }
+
   build() {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
@@ -175,10 +223,20 @@ AsciiEngine.Box = class Box {
     this.y = y;
     this.width = width;
     this.height = height;
+    this.pad = 0;
   }
 
   border(style) {
-    this.style = style;
+    if (typeof this.style === "string") {
+      this.style = style.replace(/\n/g, "");
+    }
+    else {
+      this.style = style;
+    }
+  }
+
+  padding(pad) {
+    this.pad = pad;
   }
 
   printBorder(parent) {
@@ -204,28 +262,64 @@ AsciiEngine.Box = class Box {
     }
   }
 
+  printText(parent, text, nChar = Infinity) {
+    if (this.pad * 2 + 2 >= this.width || this.pad * 2 + 2 >= this.height) return;
+    parent.printBoxed(text, this.x + this.pad + 1, this.y + this.pad + 1, this.width - this.pad * 2 - 2, this.height - this.pad * 2 - 2, nChar);
+  }
+
   getBorder(x, y) {
+    let pos;
+    if (x === this.x) {
+      if (y === this.y) {
+        pos = "topleft";
+      }
+      else if (y === this.y + this.height - 1) {
+        pos = "bottomleft";
+      }
+      else {
+        pos = "left";
+      }
+    }
+    else if (x === this.x + this.width - 1) {
+      if (y === this.y) {
+        pos = "topright";
+      }
+      else if (y === this.y + this.height - 1) {
+        pos = "bottomright";
+      }
+      else {
+        pos = "right";
+      }
+    }
+    else if (y === this.y) pos = "top";
+    else if (y === this.y + this.height - 1) pos = "bottom";
+
     if (typeof this.style === "object") {
-      if (x === this.x) {
-        if (y === this.y) {
-          return this.style.topleft || this.style.corner || this.style.default || " ";
-        }
-        if (y === this.y + this.height - 1) {
-          return this.style.bottomleft || this.style.corner || this.style.default || " ";
-        }
-        return this.style.left || this.style.default || " ";
+      switch (pos) {
+        case "topleft": return this.style.topleft || this.style.corner || this.style.default || " ";
+        case "bottomleft": return this.style.bottomleft || this.style.corner || this.style.default || " ";
+        case "left": return this.style.left || this.style.default || " ";
+        case "topright": return this.style.topright || this.style.corner || this.style.default || " ";
+        case "bottomright": return this.style.bottomright || this.style.corner || this.style.default || " ";
+        case "right": return this.style.right || this.style.default || " ";
+        case "top": return this.style.top || this.style.default || " ";
+        case "bottom": return this.style.bottom || this.style.default || " ";
       }
-      if (x === this.x + this.width - 1) {
-        if (y === this.y) {
-          return this.style.topright || this.style.corner || this.style.default || " ";
+    }
+    else if (typeof this.style === "string") {
+      if (this.style.length === 1) return this.style;
+      if (this.style.length === 9) { // 3x3
+        switch (pos) {
+          case "topleft": return this.style.charAt(0);
+          case "top": return this.style.charAt(1);
+          case "topright": return this.style.charAt(2);
+          case "left": return this.style.charAt(3);
+          case "right": return this.style.charAt(5);
+          case "bottomleft": return this.style.charAt(6);
+          case "bottom": return this.style.charAt(7);
+          case "bottomright": return this.style.charAt(8);
         }
-        if (y === this.y + this.height - 1) {
-          return this.style.bottomright || this.style.corner || this.style.default || " ";
-        }
-        return this.style.right || this.style.default || " ";
       }
-      if (y === this.y) return this.style.top || this.style.default || " ";
-      if (y === this.y + this.height - 1) return this.style.bottom || this.style.default || " ";
     }
 
     return "";
