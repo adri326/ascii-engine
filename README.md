@@ -24,6 +24,19 @@ You just need to load the script off github.io:
 </html>
 ```
 
-## Usage
+## Installation and usage
 
-The main part of the library comes down to the `AsciiEngine` class. Documentation will come soon :).
+Clone this repository by running
+
+```sh
+git clone https://github.com/adri326/ascii-engine
+```
+
+If you wish to see the example program in action, then you will also need to fetch two additional dependencies:
+
+```sh
+git submodule update --init
+```
+
+The root of this library is the `AsciiEngine` class.
+Other classes that may come handy (`Box`, `Builder`, `TextComponent`) are contained within it (`AsciiEngine.Box`, `AsciiEngine.Builder`, `AsciiEngine.TextComponent`).

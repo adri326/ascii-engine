@@ -65,6 +65,7 @@ function init() {
 
   let user = necklace.createUser({name: "Demo User"});
   let current = user.getCurrentPage();
+  currentPage = current;
   let strings = current.getAvailableStrings();
 
   ae.on("keydown", (evt) => {
@@ -78,27 +79,56 @@ function init() {
     }
   });
 
+  ae.on("mousemove", (evt) => {
+    cursorPosition = ae.getCoordinate(evt.x, evt.y);
+  });
+
   textToDisplay = renderPage(current, strings);
   timeStart = performance.now();
 
   draw();
 }
 
+let cursorPosition = [0, 0];
+let currentPage;
+
 function draw() {
   ae.background(16, 32, 64);
   ae.foreground(255, 125, 158);
   ae.fill(AsciiEngine.SPACE);
+
   box.printBorder(ae);
   ae.foreground(245, 255, 245);
   box.printText(ae, textToDisplay, Math.floor((performance.now() - timeStart) / 25));
+
+  ae.background(255, 255, 255);
+  ae.foreground(0, 0, 0);
+  ae.print(ae.getCharAt(...cursorPosition), ...cursorPosition);
+
   requestAnimationFrame(draw);
 }
 
 function renderPage(page, strings = page.getAvailableStrings()) {
-  let str = page.content;
-  str += "\n";
+  let res = [page.content, "\n"];
+
   for (let string of strings) {
-    str += `\n [${string.name}]: ${string.content}`;
+    res.push(new ClickableString(`\n [${string.name}]: ${string.content}`));
   }
-  return str;
+
+  return res;
+}
+
+class ClickableString extends AsciiEngine.TextComponent {
+  draw(engine, x, y, width = Infinity, height = Infinity) {
+    let myHeight = engine.split(this.text, width);
+    let myWidth = myHeight.reduce((acc, act) => Math.max(acc, act.length), 0);
+
+    if (cursorPosition[1] > y && cursorPosition[1] < y + myHeight.length && cursorPosition[0] > x && cursorPosition[0] < x + myWidth) {
+      engine.foreground(255, 125, 158);
+    } else {
+      engine.foreground(220);
+    }
+
+    return AsciiEngine.TextComponent._draw(this, engine, x, y, width, height);
+  }
 }
