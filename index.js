@@ -334,11 +334,13 @@ AsciiEngine.Builder = class Builder {
 * The - to my extend - most important thing about it is that you can feed it a mixed array of `TextComponent`s and strings, which it will print without them overlapping
 */
 AsciiEngine.Box = class Box {
-  constructor(x, y, width, height) {
+  constructor(engine, text, x, y, width, height) {
+    this.text = text;
     this.x = x;
     this.y = y;
     this.width = width;
     this.height = height;
+    this.engine = engine;
     this.pad = 0;
   }
 
@@ -354,50 +356,85 @@ AsciiEngine.Box = class Box {
     this.pad = pad;
   }
 
-  printBorder(parent) {
+  printBorder() {
     if (!this.style) return; // no border specified
 
     if (typeof this.style === "string") {
       if (this.style.length === 1) {
         let horizontal = this.style.repeat(this.width);
 
-        parent.print(horizontal, this.x, this.y);
-        parent.print(horizontal, this.x, this.y + this.height - 1);
+        this.engine.print(horizontal, this.x, this.y);
+        this.engine.print(horizontal, this.x, this.y + this.height - 1);
 
         for (let y = this.y + 1; y < this.y + this.height - 1; y++) {
-          parent.print(this.style, this.x, y);
-          parent.print(this.style, this.x + this.width - 1, y);
+          this.engine.print(this.style, this.x, y);
+          this.engine.print(this.style, this.x + this.width - 1, y);
         }
       }
     } else {
       for (let x = this.x; x < this.x + this.width; x++) {
-        parent.print(this.getBorder(x, this.y), x, this.y);
-        parent.print(this.getBorder(x, this.y + this.height - 1), x, this.y + this.height - 1);
+        this.engine.print(this.getBorder(x, this.y), x, this.y);
+        this.engine.print(this.getBorder(x, this.y + this.height - 1), x, this.y + this.height - 1);
       }
 
       for (let y = this.y + 1; y < this.y + this.height - 1; y++) {
-        parent.print(this.getBorder(this.x, y), this.x, y);
-        parent.print(this.getBorder(this.x + this.width - 1, y), this.x + this.width - 1, y);
+        this.engine.print(this.getBorder(this.x, y), this.x, y);
+        this.engine.print(this.getBorder(this.x + this.width - 1, y), this.x + this.width - 1, y);
       }
     }
   }
 
-  printText(parent, text, nChar = Infinity) {
+  printText(nChar = Infinity) {
     if (this.pad * 2 + 2 >= this.width || this.pad * 2 + 2 >= this.height) return;
 
-    if (Array.isArray(text)) {
+    if (Array.isArray(this.text)) {
       let y = this.y + this.pad + 1;
 
-      for (let n = 0; n < text.length; n++) {
-        if (text[n] instanceof AsciiEngine.TextComponent) {
-          y += text[n].draw(parent, this.x + this.pad + 1, y, this.width - this.pad * 2 - 2, this.height - this.pad - 1 - y);
+      for (let n = 0; n < this.text.length; n++) {
+        if (this.text[n] instanceof AsciiEngine.TextComponent) {
+          y += this.text[n].draw(this.engine, this.x + this.pad + 1, y, this.width - this.pad * 2 - 2, this.height - this.pad - 1 - y);
         } else {
-          y += parent.printBoxed(text[n], this.x + this.pad + 1, y, this.width - this.pad * 2 - 2, this.height - this.pad - 1 - y);
+          y += this.engine.printBoxed(this.text[n], this.x + this.pad + 1, y, this.width - this.pad * 2 - 2, this.height - this.pad - 1 - y);
         }
       }
     } else {
-      parent.printBoxed(text, this.x + this.pad + 1, this.y + this.pad + 1, this.width - this.pad * 2 - 2, this.height - this.pad * 2 - 2, nChar);
+      this.engine.printBoxed(this.text, this.x + this.pad + 1, this.y + this.pad + 1, this.width - this.pad * 2 - 2, this.height - this.pad * 2 - 2, nChar);
     }
+  }
+
+  updatePosition() {
+    if (this.pad * 2 + 2 >= this.width || this.pad * 2 + 2 >= this.height) return;
+
+    if (Array.isArray(this.text)) {
+      let y = this.y + this.pad + 1;
+      let width = this.width - this.pad * 2 - 2;
+
+      for (let n = 0; n < this.text.length; n++) {
+        if (this.text[n] instanceof AsciiEngine.TextComponent) {
+          y += this.text[n].updatePosition(this.engine, this.x + this.pad + 1, y, width, this.height - this.pad - 1 - y);
+        } else {
+          y += this.engine.split(this.text[n], width).length;
+        }
+      }
+    }
+  }
+
+  click(raw_x, raw_y) {
+    let [x, y] = ae.getCoordinate(raw_x, raw_y);
+    this.updatePosition();
+    let res = false;
+
+    if (Array.isArray(this.text)) {
+      this.text.forEach(str => {
+        if (str instanceof AsciiEngine.TextComponent) {
+          if (x >= str.position[0] && y >= str.position[1] && x < str.position[0] + str.size[0] && y < str.position[1] + str.size[1]) {
+            res = res || str.click(this.engine);
+          }
+        }
+      });
+    }
+
+    return res;
   }
 
   getBorder(x, y) {
@@ -461,14 +498,33 @@ AsciiEngine.Box = class Box {
 AsciiEngine.TextComponent = class TextComponent {
   constructor(text) {
     this.text = text;
+    this.position = [-1, -1];
+    this.width = [0, 0];
   }
 
   draw(engine, x, y, width, height) {
     return AsciiEngine.TextComponent._draw(this, x, y, width, height);
   }
 
+  updatePosition(engine, x, y, width, height) {
+    this.position = [x, y];
+
+    this.size = AsciiEngine.TextComponent._updatePosition(this, engine, x, y, width, height);
+    return this.size[1];
+  }
+
+  click(engine) { return false; }
+
   static _draw(instance, engine, x, y, width = Infinity, height = Infinity) {
     return engine.printBoxed(instance.text, x, y, width, height);
+  }
+
+  static _updatePosition(instance, engine, x, y, width = Infinity, height = Infinity) {
+    let split = engine.split(instance.text, width);
+    let res_height = split.length;
+    let res_width = split.reduce((acc, act) => Math.max(acc, act.length), 0);
+
+    return [res_width, res_height];
   }
 }
 
